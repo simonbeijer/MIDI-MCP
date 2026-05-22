@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.python-version
+
+# uv
+.uv/
+
+# MIDI output (genereras lokalt)
+output/
+*.mid
+
+# OS
+.DS_Store
+
+# other
+.agents/
+.claude/
+.scratch/
+CLAUDE.md
+docs/agents/
+skills-lock.json
