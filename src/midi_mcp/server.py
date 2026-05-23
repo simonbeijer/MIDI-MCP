@@ -2,6 +2,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .bass_line import bass_line as _bass_line
 from .chord_track import chord_track as _chord_track
 from .config import ensure_output_dir
 from .list_outputs import list_outputs as _list_outputs
@@ -101,6 +102,49 @@ def chord_track(
         time_sig=time_sig,
         tempo=tempo,
         voicing=voicing,
+        seed=seed,
+        humanize=humanize,
+    )
+
+
+@mcp.tool()
+def bass_line(
+    changes: list[dict[str, Any]],
+    bars: int,
+    key: str | None,
+    time_sig: list[int],
+    tempo: float,
+    style: str,
+    swing: float | None = None,
+    seed: int | None = None,
+    humanize: bool = False,
+) -> dict[str, Any]:
+    """Render a chord progression to a bass-line notes list.
+
+    Args:
+        changes: list of {bar, beat, symbol}; bar/beat are 1-based, beat is float.
+        bars: total length in bars (required; NOT inferred from max bar).
+        key: key signature; if missing, defaults to first-chord root as major + warn.
+        time_sig: [numerator, denominator]; numerator = beats-per-bar.
+        tempo: bpm (passed through; rendering itself is tempo-independent).
+        style: REQUIRED. Currently only "walking" is implemented; root_fifth
+            and sustained land in follow-up slices. Unknown values raise
+            ValueError listing the allowed set.
+        swing: per-style default if None (walking default 0.67). Recorded in
+            summary; no off-beat warp in this slice (walking is quarter-only).
+        seed: RNG seed; auto-generated if missing and written to .log.
+        humanize: accepted; True path wired in a later slice.
+
+    Returns {notes, summary, seed}.
+    """
+    return _bass_line(
+        changes=changes,
+        bars=bars,
+        key=key,
+        time_sig=time_sig,
+        tempo=tempo,
+        style=style,
+        swing=swing,
         seed=seed,
         humanize=humanize,
     )
