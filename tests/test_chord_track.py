@@ -287,6 +287,82 @@ def test_voicing_snapshot(tmp_path, voicing):
     )
 
 
+# ----- Humanize (slice 08) ---------------------------------------------------
+
+
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
+def test_humanize_true_differs_from_false(voicing):
+    """Sanity: humanize=True must produce different notes than humanize=False."""
+    from midi_mcp.chord_track import chord_track
+
+    fx = _fixture(voicing, seed=1234)
+    plain = chord_track(**fx)
+    fx["humanize"] = True
+    humanized = chord_track(**fx)
+    assert humanized["notes"] != plain["notes"], (
+        f"{voicing}: humanize=True did not change any note"
+    )
+
+
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
+def test_humanize_deterministic_same_seed(voicing):
+    from midi_mcp.chord_track import chord_track
+
+    fx = _fixture(voicing, seed=2024)
+    fx["humanize"] = True
+    r1 = chord_track(**fx)
+    r2 = chord_track(**fx)
+    assert r1["notes"] == r2["notes"]
+
+
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
+def test_humanize_start_not_before_bar_downbeat(voicing):
+    from midi_mcp.chord_track import chord_track
+
+    fx = _fixture(voicing, seed=2024)
+    fx["humanize"] = True
+    result = chord_track(**fx)
+    beats_per_bar = 4.0
+    for n in result["notes"]:
+        bar_index = int(n["start"] // beats_per_bar)
+        bar_start = bar_index * beats_per_bar
+        assert n["start"] >= bar_start - 1e-9, (
+            f"{voicing}: humanized start {n['start']} earlier than bar downbeat "
+            f"{bar_start}"
+        )
+
+
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
+def test_humanize_snapshot(tmp_path, voicing):
+    """Pipe humanized chord_track output through write_midi; byte-compare."""
+    from midi_mcp.chord_track import chord_track
+    from midi_mcp.write_midi import write_midi
+
+    fx = _fixture(voicing, seed=1234)
+    fx["humanize"] = True
+    result = chord_track(**fx)
+    write_result = write_midi(
+        tracks=[{"name": f"chords_{voicing}_h", "notes": result["notes"]}],
+        tempo=120.0,
+        time_sig=[4, 4],
+        key="C",
+        filename=f"chord_track_humanize_{voicing}",
+    )
+    produced = Path(write_result["path"]).read_bytes()
+    snap_path = SNAPSHOT_DIR / f"chord_track_humanize_{voicing}.mid"
+
+    if os.environ.get("UPDATE_SNAPSHOTS") == "1" or not snap_path.exists():
+        SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        snap_path.write_bytes(produced)
+        pytest.skip(f"snapshot written at {snap_path}")
+
+    expected = snap_path.read_bytes()
+    assert produced == expected, (
+        f"{voicing} humanize: byte mismatch ({len(produced)}B vs {len(expected)}B). "
+        f"If intentional, re-run with UPDATE_SNAPSHOTS=1."
+    )
+
+
 # ----- No random import leakage into pure-data modules -----------------------
 
 

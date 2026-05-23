@@ -24,8 +24,11 @@ Sustained pattern: one note per chord region, root pitch class held
 for the region's full duration. ``swing`` default ``0.50`` (no
 rhythmic activity to swing). Fifth/approach logic does not apply.
 
-Seeded local ``random.Random`` is held for slice-08 humanize wiring;
-the slice-07 path does not draw from it.
+Seeded local ``random.Random`` drives the ``humanize=True`` path
+(slice 08). ``humanize=False`` draws nothing from it; ``humanize=True``
+applies symmetric velocity and micro-timing jitter per note, clamping
+start to the note's bar downbeat so jitter never pushes a note
+earlier than its bar.
 """
 
 import random
@@ -70,6 +73,29 @@ def _log_seed(helper: str, seed: int) -> None:
 
 def _absolute_beat(bar: int, beat: float, beats_per_bar: float) -> float:
     return (bar - 1) * beats_per_bar + (beat - 1.0)
+
+
+# Symmetric jitter magnitudes for humanize=True. v2 will split this into
+# explicit `velocity_jitter: float` and `timing_jitter: float` params.
+_HUMANIZE_VELOCITY_RANGE = 6  # +/- units around the per-style default
+_HUMANIZE_TIMING_RANGE = 0.02  # +/- beats
+
+
+def _apply_humanize(
+    notes: list[dict[str, Any]], rng: random.Random, beats_per_bar: float
+) -> None:
+    """Apply seeded velocity + timing jitter in place.
+
+    Clamps start to the note's bar downbeat so jitter never pushes a
+    note earlier than its bar.
+    """
+    for n in notes:
+        v_jitter = rng.randint(-_HUMANIZE_VELOCITY_RANGE, _HUMANIZE_VELOCITY_RANGE)
+        n["velocity"] = max(1, min(127, int(n["velocity"]) + v_jitter))
+        t_jitter = rng.uniform(-_HUMANIZE_TIMING_RANGE, _HUMANIZE_TIMING_RANGE)
+        bar_index = int(n["start"] // beats_per_bar)
+        bar_start = bar_index * beats_per_bar
+        n["start"] = max(bar_start, n["start"] + t_jitter)
 
 
 def _realize_pc_near(pc: int, target_midi: int, lo: int, hi: int) -> int:
@@ -210,7 +236,11 @@ def bass_line(
             but does not warp note starts in this slice; wired in slice 08.
         seed: RNG seed; auto-generated if missing and appended to
             ``$MIDI_MCP_OUTPUT_DIR/.log``.
-        humanize: accepted; True path wired in slice 08.
+        humanize: when True, applies seeded symmetric velocity (+/- 6) and
+            micro-timing (+/- 0.02 beats) jitter to every note. Start is
+            clamped to the note's bar downbeat so jitter never pushes a
+            note earlier than its bar. v2 intent: split into
+            ``velocity_jitter: float`` and ``timing_jitter: float``.
 
     Returns ``{notes, summary, seed}``.
     """
@@ -251,8 +281,7 @@ def bass_line(
     if seed is None:
         seed = random.randint(0, 2**31 - 1)
         _log_seed("bass_line", seed)
-    rng = random.Random(seed)  # noqa: F841 — wired in slice 08
-    _ = humanize
+    rng = random.Random(seed)
 
     beats_per_bar = float(num)
     total_beats = bars * beats_per_bar
@@ -330,6 +359,9 @@ def bass_line(
                 }
             )
             prev_midi = root_m
+
+    if humanize:
+        _apply_humanize(notes, rng, beats_per_bar)
 
     summary = (
         f"bass_line: {len(parsed_regions)}/{len(sorted_changes)} chord(s) rendered, "

@@ -6,10 +6,12 @@ Seven voicings ship in v1: ``drop2`` (jazz), ``triad`` (indie/rock),
 (modal/gospel, fourth-stacked). ``voicing`` is a required parameter —
 there is no smart default; an unknown value raises with the allowed list.
 
-A seeded ``random.Random`` is constructed for every call so future
-``humanize=True`` wiring (slice 08) is deterministic. The current
-``humanize=False`` path uses no randomness, but the seed is still
-returned and logged so calls are reproducible after slice 08 lands.
+A seeded ``random.Random`` is constructed for every call so the
+``humanize=True`` path (slice 08) is deterministic. ``humanize=False``
+draws nothing from the RNG; ``humanize=True`` applies symmetric
+velocity and micro-timing jitter per note. Start is clamped to the
+note's bar downbeat so jitter never pushes a note earlier than its
+bar.
 """
 
 import random
@@ -251,6 +253,29 @@ def _absolute_beat(bar: int, beat: float, beats_per_bar: float) -> float:
     return (bar - 1) * beats_per_bar + (beat - 1.0)
 
 
+# Symmetric jitter magnitudes for humanize=True. v2 will split this into
+# explicit `velocity_jitter: float` and `timing_jitter: float` params.
+_HUMANIZE_VELOCITY_RANGE = 6  # +/- units around the per-voicing default
+_HUMANIZE_TIMING_RANGE = 0.02  # +/- beats
+
+
+def _apply_humanize(
+    notes: list[dict[str, Any]], rng: random.Random, beats_per_bar: float
+) -> None:
+    """Apply seeded velocity + timing jitter in place.
+
+    Clamps start to the note's bar downbeat so jitter never pushes a
+    note earlier than its bar.
+    """
+    for n in notes:
+        v_jitter = rng.randint(-_HUMANIZE_VELOCITY_RANGE, _HUMANIZE_VELOCITY_RANGE)
+        n["velocity"] = max(1, min(127, int(n["velocity"]) + v_jitter))
+        t_jitter = rng.uniform(-_HUMANIZE_TIMING_RANGE, _HUMANIZE_TIMING_RANGE)
+        bar_index = int(n["start"] // beats_per_bar)
+        bar_start = bar_index * beats_per_bar
+        n["start"] = max(bar_start, n["start"] + t_jitter)
+
+
 def chord_track(
     changes: list[dict[str, Any]],
     bars: int,
@@ -278,7 +303,11 @@ def chord_track(
             raise ``ValueError`` listing the allowed set.
         seed: RNG seed; auto-generated if missing and appended to
             ``$MIDI_MCP_OUTPUT_DIR/.log``.
-        humanize: accepted but unused in v1 slice 05; wired in slice 08.
+        humanize: when True, applies seeded symmetric velocity (+/- 6) and
+            micro-timing (+/- 0.02 beats) jitter to every note. Start is
+            clamped to the note's bar downbeat so jitter never pushes a
+            note earlier than its bar. v2 intent: split into
+            ``velocity_jitter: float`` and ``timing_jitter: float``.
 
     Returns ``{notes, summary, seed}``.
     """
@@ -319,8 +348,7 @@ def chord_track(
     if seed is None:
         seed = random.randint(0, 2**31 - 1)
         _log_seed("chord_track", seed)
-    rng = random.Random(seed)  # noqa: F841 — wired in slice 08
-    _ = humanize  # accepted, unused in slice 05
+    rng = random.Random(seed)
 
     beats_per_bar = float(num)
     total_beats = bars * beats_per_bar
@@ -361,6 +389,9 @@ def chord_track(
                 }
             )
         rendered_chords += 1
+
+    if humanize:
+        _apply_humanize(notes, rng, beats_per_bar)
 
     summary = (
         f"chord_track: {rendered_chords}/{len(sorted_changes)} chord(s) rendered, "
