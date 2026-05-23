@@ -86,8 +86,9 @@ def chord_track(
         key: key signature; if missing, defaults to first-chord root as major + warn.
         time_sig: [numerator, denominator]; numerator = beats-per-bar.
         tempo: bpm (passed through; rendering itself is tempo-independent).
-        voicing: REQUIRED. One of "drop2", "triad", "sustained_pad".
-            Unknown values raise ValueError listing the allowed set.
+        voicing: REQUIRED. One of "drop2", "triad", "sustained_pad",
+            "shell", "rootless", "power", "quartal". Unknown values raise
+            ValueError listing the allowed set.
         seed: RNG seed; auto-generated if missing and written to .log.
         humanize: accepted; True path is wired in a later slice.
 

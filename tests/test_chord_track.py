@@ -16,6 +16,16 @@ import pytest
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 
+ALL_VOICINGS = [
+    "drop2",
+    "triad",
+    "sustained_pad",
+    "shell",
+    "rootless",
+    "power",
+    "quartal",
+]
+
 # I-vi-IV-V in C, one chord per bar, 4 bars, 4/4. Fixed seed for
 # deterministic snapshots.
 _CHANGES = [
@@ -74,16 +84,16 @@ def test_unknown_voicing_raises_with_allowed_list():
     from midi_mcp.chord_track import ALLOWED_VOICINGS, chord_track
 
     fx = _fixture("triad")
-    fx["voicing"] = "shell"
+    fx["voicing"] = "not_a_voicing"
     with pytest.raises(ValueError) as exc:
         chord_track(**fx)
     msg = str(exc.value)
-    assert "shell" in msg
+    assert "not_a_voicing" in msg
     for v in ALLOWED_VOICINGS:
         assert v in msg, f"allowed voicing {v!r} missing from error message"
 
 
-@pytest.mark.parametrize("voicing", ["drop2", "triad", "sustained_pad"])
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
 def test_each_voicing_produces_notes(voicing):
     from midi_mcp.chord_track import chord_track
 
@@ -94,7 +104,7 @@ def test_each_voicing_produces_notes(voicing):
 # ----- Property: pitch-class subset ------------------------------------------
 
 
-@pytest.mark.parametrize("voicing", ["drop2", "triad", "sustained_pad"])
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
 def test_pitch_classes_subset_of_chord_pcs(voicing):
     """Each chord region's notes must use only the chord's own pitch classes."""
     from midi_mcp.chord_track import chord_track
@@ -118,10 +128,39 @@ def test_pitch_classes_subset_of_chord_pcs(voicing):
         )
 
 
+# ----- Property: rootless explicitly omits the chord root -------------------
+
+
+def test_rootless_omits_chord_root():
+    """rootless must not include the chord root pitch class in any region.
+
+    The subset test allows root absence; this one asserts it.
+    """
+    from midi_mcp.chord_track import chord_track
+    from midi_mcp.theory.harmony import parse_chord
+
+    result = chord_track(**_fixture("rootless"))
+    notes = result["notes"]
+    beats_per_bar = 4.0
+    for i, ch in enumerate(_CHANGES):
+        start = (ch["bar"] - 1) * beats_per_bar + (ch["beat"] - 1)
+        end = (
+            (_CHANGES[i + 1]["bar"] - 1) * beats_per_bar + (_CHANGES[i + 1]["beat"] - 1)
+            if i < len(_CHANGES) - 1
+            else 4 * beats_per_bar
+        )
+        root_pc = parse_chord(ch["symbol"])["root"]
+        region_pcs = {n["pitch"] % 12 for n in notes if start <= n["start"] < end}
+        assert root_pc not in region_pcs, (
+            f"rootless @ bar {ch['bar']} ({ch['symbol']}): root pc {root_pc} "
+            f"present in {region_pcs}"
+        )
+
+
 # ----- Property: voicing-specific register -----------------------------------
 
 
-@pytest.mark.parametrize("voicing", ["drop2", "triad", "sustained_pad"])
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
 def test_pitches_within_voicing_register(voicing):
     from midi_mcp.chord_track import VOICING_REGISTER, chord_track
 
@@ -136,7 +175,7 @@ def test_pitches_within_voicing_register(voicing):
 # ----- Property: RNG isolation (same seed → same notes) ----------------------
 
 
-@pytest.mark.parametrize("voicing", ["drop2", "triad", "sustained_pad"])
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
 def test_same_seed_same_notes(voicing):
     from midi_mcp.chord_track import chord_track
 
@@ -159,7 +198,7 @@ def test_rng_isolation_between_calls():
 # ----- Property: bar coverage -------------------------------------------------
 
 
-@pytest.mark.parametrize("voicing", ["drop2", "triad", "sustained_pad"])
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
 def test_notes_span_bars(voicing):
     """Final chord must extend to end of `bars` (no premature stop)."""
     from midi_mcp.chord_track import chord_track
@@ -219,7 +258,7 @@ def test_missing_key_warns_and_uses_first_chord_root():
 # ----- Snapshot tests ---------------------------------------------------------
 
 
-@pytest.mark.parametrize("voicing", ["drop2", "triad", "sustained_pad"])
+@pytest.mark.parametrize("voicing", ALL_VOICINGS)
 def test_voicing_snapshot(tmp_path, voicing):
     """Pipe chord_track output through write_midi; byte-compare the .mid file."""
     from midi_mcp.chord_track import chord_track
