@@ -1,9 +1,8 @@
 """`bass_line` helper: render chord changes as a bass line.
 
-Slices 07a (walking) and 07b (root_fifth) shipped. ``sustained`` lands
-in a follow-up slice without breaking the contract — ``style`` is
-required and validated against ``ALLOWED_STYLES``, so unknown values
-raise listing the set that is actually wired today.
+Slices 07a (walking), 07b (root_fifth), and 07c (sustained) shipped.
+``style`` is required and validated against ``ALLOWED_STYLES``, so
+unknown values raise listing the set that is actually wired today.
 
 Walking pattern in 4/4: quarter notes, ``[root, 3rd, 5th, approach]``
 where ``approach`` is a chromatic half-step below the next chord's
@@ -21,6 +20,10 @@ Simplest-choice note: long single-chord regions (> 4 beats / 1 bar)
 would let the fifth's duration cross a barline; the test fixture only
 exercises chord-per-bar so we don't split per-bar yet.
 
+Sustained pattern: one note per chord region, root pitch class held
+for the region's full duration. ``swing`` default ``0.50`` (no
+rhythmic activity to swing). Fifth/approach logic does not apply.
+
 Seeded local ``random.Random`` is held for slice-08 humanize wiring;
 the slice-07 path does not draw from it.
 """
@@ -33,7 +36,7 @@ from typing import Any
 from .config import output_dir
 from .theory.harmony import parse_chord
 
-ALLOWED_STYLES = ("walking", "root_fifth")
+ALLOWED_STYLES = ("walking", "root_fifth", "sustained")
 
 _PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -41,6 +44,7 @@ _PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 BASS_REGISTER: dict[str, tuple[int, int]] = {
     "walking": (28, 55),  # E1 - G3, upright/electric bass range
     "root_fifth": (28, 55),
+    "sustained": (28, 55),
 }
 
 # Per-style defaults. `anchor_pitch` is the target MIDI for the very
@@ -48,6 +52,7 @@ BASS_REGISTER: dict[str, tuple[int, int]] = {
 _STYLE_DEFAULTS: dict[str, dict[str, Any]] = {
     "walking": {"velocity": 90, "anchor_pitch": 40, "swing": 0.67},
     "root_fifth": {"velocity": 90, "anchor_pitch": 40, "swing": 0.50},
+    "sustained": {"velocity": 90, "anchor_pitch": 40, "swing": 0.50},
 }
 
 
@@ -198,12 +203,11 @@ def bass_line(
             major and emits a warning.
         time_sig: ``[numerator, denominator]``; numerator = beats-per-bar.
         tempo: bpm (passed through; rendering is tempo-independent).
-        style: REQUIRED. ``walking`` and ``root_fifth`` are implemented;
-            ``sustained`` lands in a follow-up slice. Unknown values raise
-            ``ValueError`` listing the allowed set.
+        style: REQUIRED. One of ``walking``, ``root_fifth``, ``sustained``.
+            Unknown values raise ``ValueError`` listing the allowed set.
         swing: per-style default applied if ``None`` (walking 0.67,
-            root_fifth 0.50). Recorded in the summary but does not warp
-            note starts in this slice; wired in slice 08.
+            root_fifth 0.50, sustained 0.50). Recorded in the summary
+            but does not warp note starts in this slice; wired in slice 08.
         seed: RNG seed; auto-generated if missing and appended to
             ``$MIDI_MCP_OUTPUT_DIR/.log``.
         humanize: accepted; True path wired in slice 08.
@@ -312,6 +316,20 @@ def bass_line(
                 parsed, start, n_beats, prev_midi, anchor, lo, hi, velocity
             )
             notes.extend(region_notes)
+        elif style == "sustained":
+            root_pc = parsed["root"]
+            target = anchor if prev_midi is None else prev_midi
+            root_m = _realize_pc_near(root_pc, target, lo, hi)
+            notes.append(
+                {
+                    "pitch": int(root_m),
+                    "start": float(start),
+                    "duration": float(n_beats),
+                    "velocity": velocity,
+                    "channel": 0,
+                }
+            )
+            prev_midi = root_m
 
     summary = (
         f"bass_line: {len(parsed_regions)}/{len(sorted_changes)} chord(s) rendered, "

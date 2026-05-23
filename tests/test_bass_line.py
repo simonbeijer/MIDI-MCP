@@ -1,4 +1,4 @@
-"""Tests for bass_line: walking + root_fifth (slices 07a, 07b).
+"""Tests for bass_line: walking + root_fifth + sustained (slices 07a, 07b, 07c).
 
 Snapshots are byte-compares of the .mid file produced by piping
 bass_line output through write_midi. To regenerate after an
@@ -16,7 +16,7 @@ import pytest
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 
-ALL_STYLES = ["walking", "root_fifth"]
+ALL_STYLES = ["walking", "root_fifth", "sustained"]
 
 _CHANGES = [
     {"bar": 1, "beat": 1.0, "symbol": "Cmaj7"},
@@ -155,6 +155,31 @@ def test_root_fifth_beat_one_is_root_and_beat_three_is_fifth():
                 f"bar {ch['bar']} beat 3 pitch {n['pitch']} (pc {n['pitch'] % 12}) "
                 f"not in fifth-or-root {allowed_beat_three} of {ch['symbol']}"
             )
+
+
+# ----- Property: sustained covers chord slot exactly -------------------------
+
+
+def test_sustained_note_durations_cover_chord_slots():
+    """Each sustained note's duration covers its chord region exactly."""
+    from midi_mcp.bass_line import bass_line
+
+    result = bass_line(**_fixture("sustained"))
+    notes = sorted(result["notes"], key=lambda n: n["start"])
+    beats_per_bar = 4.0
+    bar_starts = [(ch["bar"] - 1) * beats_per_bar for ch in _CHANGES]
+    total_beats = 4 * beats_per_bar
+    expected_slots = [
+        (bar_starts[i], (bar_starts[i + 1] if i + 1 < len(bar_starts) else total_beats))
+        for i in range(len(bar_starts))
+    ]
+    assert len(notes) == len(expected_slots), (
+        f"sustained: expected one note per chord region "
+        f"({len(expected_slots)}), got {len(notes)}"
+    )
+    for n, (s, e) in zip(notes, expected_slots):
+        assert n["start"] == pytest.approx(s)
+        assert n["start"] + n["duration"] == pytest.approx(e)
 
 
 # ----- Property: grid alignment, no cross-barline ----------------------------
