@@ -2,6 +2,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .chord_track import chord_track as _chord_track
 from .config import ensure_output_dir
 from .list_outputs import list_outputs as _list_outputs
 from .read_midi import read_midi as _read_midi
@@ -64,6 +65,44 @@ def transpose(notes: list[dict[str, Any]], semitones: int) -> list[dict[str, Any
     [0, 127] after the shift are clamped and a warning is emitted.
     """
     return _transpose(notes, semitones)
+
+
+@mcp.tool()
+def chord_track(
+    changes: list[dict[str, Any]],
+    bars: int,
+    key: str | None,
+    time_sig: list[int],
+    tempo: float,
+    voicing: str,
+    seed: int | None = None,
+    humanize: bool = False,
+) -> dict[str, Any]:
+    """Render a chord progression to a voiced notes list.
+
+    Args:
+        changes: list of {bar, beat, symbol}; bar/beat are 1-based, beat is float.
+        bars: total length in bars (required; NOT inferred from max bar).
+        key: key signature; if missing, defaults to first-chord root as major + warn.
+        time_sig: [numerator, denominator]; numerator = beats-per-bar.
+        tempo: bpm (passed through; rendering itself is tempo-independent).
+        voicing: REQUIRED. One of "drop2", "triad", "sustained_pad".
+            Unknown values raise ValueError listing the allowed set.
+        seed: RNG seed; auto-generated if missing and written to .log.
+        humanize: accepted; True path is wired in a later slice.
+
+    Returns {notes, summary, seed}.
+    """
+    return _chord_track(
+        changes=changes,
+        bars=bars,
+        key=key,
+        time_sig=time_sig,
+        tempo=tempo,
+        voicing=voicing,
+        seed=seed,
+        humanize=humanize,
+    )
 
 
 def run() -> None:
