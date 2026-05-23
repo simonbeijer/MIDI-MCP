@@ -1,4 +1,4 @@
-"""Tests for bass_line: walking style only in slice 07a.
+"""Tests for bass_line: walking + root_fifth (slices 07a, 07b).
 
 Snapshots are byte-compares of the .mid file produced by piping
 bass_line output through write_midi. To regenerate after an
@@ -16,7 +16,7 @@ import pytest
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 
-ALL_STYLES = ["walking"]
+ALL_STYLES = ["walking", "root_fifth"]
 
 _CHANGES = [
     {"bar": 1, "beat": 1.0, "symbol": "Cmaj7"},
@@ -115,6 +115,45 @@ def test_walking_beat_one_is_chord_tone():
             assert n["pitch"] % 12 in chord_pcs, (
                 f"bar {ch['bar']} beat 1 pitch {n['pitch']} (pc {n['pitch'] % 12}) "
                 f"not in chord {ch['symbol']} pcs {chord_pcs}"
+            )
+
+
+# ----- Property: root_fifth beat-1 is root, beat-3 is fifth ------------------
+
+
+def test_root_fifth_beat_one_is_root_and_beat_three_is_fifth():
+    """Beat 1 of each bar = chord root; beat 3 = fifth (or root, sub-rule)."""
+    from midi_mcp.bass_line import bass_line
+    from midi_mcp.theory.harmony import parse_chord
+
+    result = bass_line(**_fixture("root_fifth"))
+    notes = result["notes"]
+    beats_per_bar = 4.0
+    for ch in _CHANGES:
+        bar_start = (ch["bar"] - 1) * beats_per_bar
+        parsed = parse_chord(ch["symbol"])
+        root_pc = parsed["root"]
+        fifth_pcs = {(root_pc + s) % 12 for s in (7, 6, 8)} & set(
+            parsed["pitch_classes"]
+        )
+        allowed_beat_three = fifth_pcs | {root_pc}
+
+        beat_one = [n for n in notes if n["start"] == pytest.approx(bar_start)]
+        assert beat_one, f"no note on beat 1 of bar {ch['bar']}"
+        for n in beat_one:
+            assert n["pitch"] % 12 == root_pc, (
+                f"bar {ch['bar']} beat 1 pitch {n['pitch']} (pc {n['pitch'] % 12}) "
+                f"is not root pc {root_pc} of {ch['symbol']}"
+            )
+
+        beat_three = [
+            n for n in notes if n["start"] == pytest.approx(bar_start + 2.0)
+        ]
+        assert beat_three, f"no note on beat 3 of bar {ch['bar']}"
+        for n in beat_three:
+            assert n["pitch"] % 12 in allowed_beat_three, (
+                f"bar {ch['bar']} beat 3 pitch {n['pitch']} (pc {n['pitch'] % 12}) "
+                f"not in fifth-or-root {allowed_beat_three} of {ch['symbol']}"
             )
 
 

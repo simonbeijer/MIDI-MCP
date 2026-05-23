@@ -1,11 +1,9 @@
 """`bass_line` helper: render chord changes as a bass line.
 
-Sub-slice 07a of slice 07 (per build order: walking before root_fifth
-before sustained). Only the ``walking`` style ships in this slice;
-``root_fifth`` and ``sustained`` will be added in follow-up slices
-without breaking the contract — ``style`` is required and validated
-against ``ALLOWED_STYLES``, so unknown values raise listing the set
-that is actually wired today.
+Slices 07a (walking) and 07b (root_fifth) shipped. ``sustained`` lands
+in a follow-up slice without breaking the contract — ``style`` is
+required and validated against ``ALLOWED_STYLES``, so unknown values
+raise listing the set that is actually wired today.
 
 Walking pattern in 4/4: quarter notes, ``[root, 3rd, 5th, approach]``
 where ``approach`` is a chromatic half-step below the next chord's
@@ -13,6 +11,15 @@ root (degenerates to the chord's own root for the final region — see
 ``_walking_region_pitches``). Approach-tone choice, beat-2 chord-tone
 preference and register were chosen for simplicity; the textbook-fit
 listen test gates whether they survive.
+
+Root-fifth pattern: half-note root at region start, half-note fifth at
+region start + 2. Falls back to root-only if the region is < 3 beats,
+and to root pc if the chord has no fifth (e.g. some sus voicings). No
+sub-rule deviation in this slice — every bar gets root-then-fifth;
+issue's "or root, per documented sub-rule" left for a later pass.
+Simplest-choice note: long single-chord regions (> 4 beats / 1 bar)
+would let the fifth's duration cross a barline; the test fixture only
+exercises chord-per-bar so we don't split per-bar yet.
 
 Seeded local ``random.Random`` is held for slice-08 humanize wiring;
 the slice-07 path does not draw from it.
@@ -26,19 +33,21 @@ from typing import Any
 from .config import output_dir
 from .theory.harmony import parse_chord
 
-ALLOWED_STYLES = ("walking",)
+ALLOWED_STYLES = ("walking", "root_fifth")
 
 _PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 # Per-style register windows enforced by property tests.
 BASS_REGISTER: dict[str, tuple[int, int]] = {
     "walking": (28, 55),  # E1 - G3, upright/electric bass range
+    "root_fifth": (28, 55),
 }
 
 # Per-style defaults. `anchor_pitch` is the target MIDI for the very
 # first note; subsequent notes track to the previous pitch.
 _STYLE_DEFAULTS: dict[str, dict[str, Any]] = {
     "walking": {"velocity": 90, "anchor_pitch": 40, "swing": 0.67},
+    "root_fifth": {"velocity": 90, "anchor_pitch": 40, "swing": 0.50},
 }
 
 
@@ -123,6 +132,51 @@ def _walking_region_pitches(
     return pitches
 
 
+def _root_fifth_region_notes(
+    parsed: dict[str, Any],
+    start: float,
+    n_beats: int,
+    prev_midi: int | None,
+    anchor: int,
+    lo: int,
+    hi: int,
+    velocity: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Half-note root at region beat 1, half-note fifth at region beat 3.
+
+    Falls back to root-only if ``n_beats < 3``. Fifth degenerates to root
+    pc when chord has no fifth (e.g. some sus voicings).
+    """
+    root_pc = parsed["root"]
+    fifth_pc = _pick_chord_tone(parsed, [7, 6, 8])
+    if fifth_pc is None:
+        fifth_pc = root_pc
+    target = anchor if prev_midi is None else prev_midi
+    root_m = _realize_pc_near(root_pc, target, lo, hi)
+    notes: list[dict[str, Any]] = [
+        {
+            "pitch": root_m,
+            "start": float(start),
+            "duration": float(min(2, n_beats)),
+            "velocity": velocity,
+            "channel": 0,
+        }
+    ]
+    if n_beats < 3:
+        return notes, root_m
+    fifth_m = _realize_pc_near(fifth_pc, root_m, lo, hi)
+    notes.append(
+        {
+            "pitch": fifth_m,
+            "start": float(start + 2.0),
+            "duration": float(n_beats - 2),
+            "velocity": velocity,
+            "channel": 0,
+        }
+    )
+    return notes, fifth_m
+
+
 def bass_line(
     changes: list[dict[str, Any]],
     bars: int,
@@ -144,13 +198,12 @@ def bass_line(
             major and emits a warning.
         time_sig: ``[numerator, denominator]``; numerator = beats-per-bar.
         tempo: bpm (passed through; rendering is tempo-independent).
-        style: REQUIRED. Currently only ``walking`` is implemented in this
-            slice; ``root_fifth`` and ``sustained`` land in follow-up slices.
-            Unknown values raise ``ValueError`` listing the allowed set.
-        swing: per-style default applied if ``None`` (walking default 0.67).
-            Quarter-note walking has no off-beat eighths, so this slice
-            records the parameter in the summary but does not warp note
-            starts; wired in slice 08.
+        style: REQUIRED. ``walking`` and ``root_fifth`` are implemented;
+            ``sustained`` lands in a follow-up slice. Unknown values raise
+            ``ValueError`` listing the allowed set.
+        swing: per-style default applied if ``None`` (walking 0.67,
+            root_fifth 0.50). Recorded in the summary but does not warp
+            note starts in this slice; wired in slice 08.
         seed: RNG seed; auto-generated if missing and appended to
             ``$MIDI_MCP_OUTPUT_DIR/.log``.
         humanize: accepted; True path wired in slice 08.
@@ -232,25 +285,33 @@ def bass_line(
     prev_midi: int | None = None
 
     for i, (start, end, parsed) in enumerate(parsed_regions):
-        next_parsed = parsed_regions[i + 1][2] if i + 1 < len(parsed_regions) else None
         n_beats = int(round(end - start))
         if n_beats <= 0:
             continue
-        pitches = _walking_region_pitches(
-            parsed, next_parsed, n_beats, prev_midi, anchor, lo, hi
-        )
-        for j, p in enumerate(pitches):
-            notes.append(
-                {
-                    "pitch": int(p),
-                    "start": float(start + j),
-                    "duration": 1.0,
-                    "velocity": velocity,
-                    "channel": 0,
-                }
+        if style == "walking":
+            next_parsed = (
+                parsed_regions[i + 1][2] if i + 1 < len(parsed_regions) else None
             )
-        if pitches:
-            prev_midi = pitches[-1]
+            pitches = _walking_region_pitches(
+                parsed, next_parsed, n_beats, prev_midi, anchor, lo, hi
+            )
+            for j, p in enumerate(pitches):
+                notes.append(
+                    {
+                        "pitch": int(p),
+                        "start": float(start + j),
+                        "duration": 1.0,
+                        "velocity": velocity,
+                        "channel": 0,
+                    }
+                )
+            if pitches:
+                prev_midi = pitches[-1]
+        elif style == "root_fifth":
+            region_notes, prev_midi = _root_fifth_region_notes(
+                parsed, start, n_beats, prev_midi, anchor, lo, hi, velocity
+            )
+            notes.extend(region_notes)
 
     summary = (
         f"bass_line: {len(parsed_regions)}/{len(sorted_changes)} chord(s) rendered, "
