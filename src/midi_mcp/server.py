@@ -3,6 +3,9 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from .config import ensure_output_dir
+from .list_outputs import list_outputs as _list_outputs
+from .read_midi import read_midi as _read_midi
+from .transpose import transpose as _transpose
 from .write_midi import write_midi as _write_midi
 
 mcp = FastMCP("midi-mcp")
@@ -31,6 +34,36 @@ def write_midi(
     Returns {path, warnings, summary, duration_seconds}.
     """
     return _write_midi(tracks, tempo, time_sig, key, filename, overwrite)
+
+
+@mcp.tool()
+def read_midi(path: str) -> dict[str, Any]:
+    """Read a .mid file and return its structured contents.
+
+    Returns {summary, first_50_notes, tempo, time_sig, key, track_count}.
+    Notes are truncated to the first 50 to bound context size.
+    """
+    return _read_midi(path)
+
+
+@mcp.tool()
+def list_outputs() -> list[dict[str, Any]]:
+    """List .mid files in MIDI_MCP_OUTPUT_DIR.
+
+    Returns [{filename, modified, size_bytes}, ...]. Excludes dotfiles
+    (including the seed .log) and any non-.mid files.
+    """
+    return _list_outputs()
+
+
+@mcp.tool()
+def transpose(notes: list[dict[str, Any]], semitones: int) -> list[dict[str, Any]]:
+    """Shift each note's pitch by `semitones`. Returns the new notes list.
+
+    Operates on the data-contract notes list (not on a file). Pitches outside
+    [0, 127] after the shift are clamped and a warning is emitted.
+    """
+    return _transpose(notes, semitones)
 
 
 def run() -> None:

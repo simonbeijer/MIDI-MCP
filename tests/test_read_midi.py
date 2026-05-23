@@ -1,0 +1,105 @@
+"""Behavior tests for read_midi: round-trip metadata + first_50_notes shape."""
+
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolated_output_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIDI_MCP_OUTPUT_DIR", str(tmp_path))
+    yield tmp_path
+
+
+def _scale_fixture() -> dict:
+    pitches = [60, 62, 64, 65, 67, 69, 71, 72]
+    notes = [
+        {"pitch": p, "start": float(i), "duration": 1.0, "velocity": 80, "channel": 0}
+        for i, p in enumerate(pitches)
+    ]
+    return {
+        "tracks": [{"name": "scale", "notes": notes}],
+        "tempo": 120.0,
+        "time_sig": [4, 4],
+        "key": "C",
+        "filename": "scale_for_read",
+    }
+
+
+def test_read_midi_returns_expected_shape(tmp_path):
+    from midi_mcp.read_midi import read_midi
+    from midi_mcp.write_midi import write_midi
+
+    write_midi(**_scale_fixture())
+    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+
+    assert set(result.keys()) == {
+        "summary",
+        "first_50_notes",
+        "tempo",
+        "time_sig",
+        "key",
+        "track_count",
+    }
+    assert isinstance(result["summary"], str)
+    assert isinstance(result["first_50_notes"], list)
+
+
+def test_round_trip_preserves_tempo_time_sig_key(tmp_path):
+    from midi_mcp.read_midi import read_midi
+    from midi_mcp.write_midi import write_midi
+
+    fx = _scale_fixture()
+    fx["tempo"] = 96.0
+    fx["time_sig"] = [3, 4]
+    fx["key"] = "Bb"
+    write_midi(**fx)
+
+    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+    assert result["tempo"] == pytest.approx(96.0, abs=1e-3)
+    assert result["time_sig"] == [3, 4]
+    assert result["key"] == "Bb"
+
+
+def test_round_trip_preserves_note_count(tmp_path):
+    from midi_mcp.read_midi import read_midi
+    from midi_mcp.write_midi import write_midi
+
+    write_midi(**_scale_fixture())
+    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+    # 8 notes written → 8 notes parseable from the file
+    assert len(result["first_50_notes"]) == 8
+
+
+def test_first_50_notes_truncates_at_50(tmp_path):
+    from midi_mcp.read_midi import read_midi
+    from midi_mcp.write_midi import write_midi
+
+    notes = [
+        {"pitch": 60, "start": float(i) * 0.25, "duration": 0.25, "velocity": 80, "channel": 0}
+        for i in range(75)
+    ]
+    fx = _scale_fixture()
+    fx["tracks"] = [{"name": "many", "notes": notes}]
+    fx["filename"] = "many_notes"
+    write_midi(**fx)
+
+    result = read_midi(str(tmp_path / "many_notes.mid"))
+    assert len(result["first_50_notes"]) == 50
+
+
+def test_track_count_matches_written_file(tmp_path):
+    from midi_mcp.read_midi import read_midi
+    from midi_mcp.write_midi import write_midi
+
+    write_midi(**_scale_fixture())
+    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+    # conductor + 1 note track
+    assert result["track_count"] == 2
+
+
+def test_missing_file_raises(tmp_path):
+    from midi_mcp.read_midi import read_midi
+
+    with pytest.raises(FileNotFoundError):
+        read_midi(str(tmp_path / "nope.mid"))
