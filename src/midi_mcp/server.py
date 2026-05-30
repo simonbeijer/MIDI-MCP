@@ -2,9 +2,9 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .bass_line import bass_line as _bass_line
 from .chord_track import chord_track as _chord_track
 from .config import ensure_output_dir
+from .freeform_track import freeform_track as _freeform_track
 from .list_outputs import list_outputs as _list_outputs
 from .read_midi import read_midi as _read_midi
 from .transpose import transpose as _transpose
@@ -108,46 +108,29 @@ def chord_track(
 
 
 @mcp.tool()
-def bass_line(
-    changes: list[dict[str, Any]],
-    bars: int,
-    key: str | None,
-    time_sig: list[int],
-    tempo: float,
-    style: str,
-    swing: float | None = None,
-    seed: int | None = None,
-    humanize: bool = False,
+def freeform_track(
+    notes: list[dict[str, Any]],
+    channel: int,
+    instrument: int | None = None,
 ) -> dict[str, Any]:
-    """Render a chord progression to a bass-line notes list.
+    """Validate caller-composed notes; no music theory applied.
+
+    The style escape hatch: anything outside chord_track's rule-bound
+    voicing palette (bass lines, melodies, leads) flows through here.
+    The caller — typically the LLM — owns the melodic/rhythmic decisions.
 
     Args:
-        changes: list of {bar, beat, symbol}; bar/beat are 1-based, beat is float.
-        bars: total length in bars (required; NOT inferred from max bar).
-        key: key signature; if missing, defaults to first-chord root as major + warn.
-        time_sig: [numerator, denominator]; numerator = beats-per-bar.
-        tempo: bpm (passed through; rendering itself is tempo-independent).
-        style: REQUIRED. Currently only "walking" is implemented; root_fifth
-            and sustained land in follow-up slices. Unknown values raise
-            ValueError listing the allowed set.
-        swing: per-style default if None (walking default 0.67). Recorded in
-            summary; no off-beat warp in this slice (walking is quarter-only).
-        seed: RNG seed; auto-generated if missing and written to .log.
-        humanize: accepted; True path wired in a later slice.
+        notes: non-empty list of {pitch, start, duration, velocity[, channel]}.
+            Pitch in [0, 127]; velocity in [1, 127]; start >= 0; duration > 0.
+            A note that omits `channel` inherits the track-level `channel`.
+        channel: default MIDI channel (0-15) when a note omits its own.
+        instrument: optional GM program number (0-127). Echoed in the
+            result so the caller can forward it into write_midi as the
+            track's `instrument`.
 
-    Returns {notes, summary, seed}.
+    Returns {notes, instrument, summary}. notes are sorted by start.
     """
-    return _bass_line(
-        changes=changes,
-        bars=bars,
-        key=key,
-        time_sig=time_sig,
-        tempo=tempo,
-        style=style,
-        swing=swing,
-        seed=seed,
-        humanize=humanize,
-    )
+    return _freeform_track(notes=notes, channel=channel, instrument=instrument)
 
 
 def run() -> None:
