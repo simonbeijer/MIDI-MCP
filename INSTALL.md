@@ -172,10 +172,11 @@ Click the small tools/hammer icon in the chat box. You should see **midi-mcp** l
 Generated `.mid` files appear in:
 
 ```
-~/Documents/MIDI-MCP/
+~/Documents/MIDI-MCP/<YYYY-MM-DD>/    # default — today's date folder
+~/Documents/MIDI-MCP/<your_song>/     # if Claude knows the song name
 ```
 
-Open that folder in Finder.
+By default each day gets its own folder so today's work is easy to find. If you tell Claude something like "save it in the blues demo project", it groups all takes for that song together across days. Open the parent folder in Finder.
 
 ---
 

@@ -79,8 +79,8 @@ def test_track_0_is_conductor_only(tmp_path):
 
     from midi_mcp.write_midi import write_midi
 
-    write_midi(**_c_major_scale_fixture())
-    mid = mido.MidiFile(str(tmp_path / "c_major_scale.mid"))
+    result = write_midi(**_c_major_scale_fixture())
+    mid = mido.MidiFile(result["path"])
     assert len(mid.tracks) >= 2, "must have conductor + at least one note track"
     note_msgs_t0 = [m for m in mid.tracks[0] if m.type in ("note_on", "note_off")]
     assert note_msgs_t0 == [], "track 0 must be conductor-only (no note events)"
@@ -94,8 +94,8 @@ def test_meta_event_order_at_track_0(tmp_path):
 
     from midi_mcp.write_midi import write_midi
 
-    write_midi(**_c_major_scale_fixture())
-    mid = mido.MidiFile(str(tmp_path / "c_major_scale.mid"))
+    result = write_midi(**_c_major_scale_fixture())
+    mid = mido.MidiFile(result["path"])
     types = [m.type for m in mid.tracks[0]]
     expected_order = ["set_tempo", "time_signature", "key_signature", "end_of_track"]
     # filter to the four we care about, preserving order
@@ -108,8 +108,8 @@ def test_uses_real_note_off_not_velocity_zero(tmp_path):
 
     from midi_mcp.write_midi import write_midi
 
-    write_midi(**_c_major_scale_fixture())
-    mid = mido.MidiFile(str(tmp_path / "c_major_scale.mid"))
+    result = write_midi(**_c_major_scale_fixture())
+    mid = mido.MidiFile(result["path"])
     for track in mid.tracks[1:]:
         for msg in track:
             if msg.type == "note_on":
@@ -147,7 +147,29 @@ def test_overwrite_true_reuses_name(tmp_path):
     fx["overwrite"] = True
     r2 = write_midi(**fx)
     assert r1["path"] == r2["path"]
-    assert list(tmp_path.iterdir()) == [Path(r2["path"])]
+    target_dir = Path(r2["path"]).parent
+    assert list(target_dir.iterdir()) == [Path(r2["path"])]
+
+
+def test_project_folder_routes_file_into_project_dir(tmp_path):
+    from midi_mcp.write_midi import write_midi
+
+    fx = _c_major_scale_fixture()
+    fx["project"] = "blues_demo"
+    result = write_midi(**fx)
+    out_path = Path(result["path"])
+    assert out_path.parent == tmp_path / "blues_demo"
+    assert out_path.exists()
+
+
+def test_default_routes_to_today_date_folder(tmp_path):
+    from datetime import date
+
+    from midi_mcp.write_midi import write_midi
+
+    result = write_midi(**_c_major_scale_fixture())
+    out_path = Path(result["path"])
+    assert out_path.parent == tmp_path / date.today().isoformat()
 
 
 def test_invalid_key_warns_and_defaults_to_C(tmp_path):

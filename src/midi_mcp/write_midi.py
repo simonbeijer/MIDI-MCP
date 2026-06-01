@@ -36,8 +36,12 @@ def write_midi(
     key: str,
     filename: str,
     overwrite: bool = False,
+    project: str | None = None,
 ) -> dict[str, Any]:
     """Render ``tracks`` to a .mid under ``MIDI_MCP_OUTPUT_DIR``.
+
+    The file lands in ``<output_dir>/<project>/`` if ``project`` is given,
+    otherwise in ``<output_dir>/<YYYY-MM-DD>/`` (today's date).
 
     Returns ``{path, warnings, summary, duration_seconds}``.
     Raises ``PathRejected`` on path-like input or ``ValueError`` on
@@ -52,7 +56,7 @@ def write_midi(
     sig = _validate_time_sig(time_sig, warnings)
     key_validated = _validate_key(key, warnings)
 
-    path = resolve_output(filename, overwrite=overwrite)
+    path = resolve_output(filename, overwrite=overwrite, project=project)
     if path.name != f"{filename}.mid" and path.name != filename:
         warnings.append(f"filename sanitized: {filename!r} → {path.name!r}")
 

@@ -5,6 +5,7 @@
 
 import re
 import unicodedata
+from datetime import date
 from pathlib import Path
 
 from .config import ensure_output_dir
@@ -41,16 +42,23 @@ def _strip_mid_extension(name: str) -> str:
     return name
 
 
-def sanitize_basename(name: str) -> str:
-    """Sanitize to `[a-z0-9_-]`. Empty result → ``"untitled"``."""
-    stem = _strip_mid_extension(name)
+def _sanitize(stem: str) -> str:
     decomposed = unicodedata.normalize("NFKD", stem)
     ascii_only = "".join(c for c in decomposed if not unicodedata.combining(c))
     lowered = ascii_only.lower()
     spaced = _WHITESPACE.sub("_", lowered)
     kept = "".join(c for c in spaced if _VALID_CHAR.match(c))
-    truncated = kept[:_MAX_LEN]
-    return truncated or "untitled"
+    return kept[:_MAX_LEN]
+
+
+def sanitize_basename(name: str) -> str:
+    """Sanitize to `[a-z0-9_-]`. Empty result → ``"untitled"``."""
+    return _sanitize(_strip_mid_extension(name)) or "untitled"
+
+
+def sanitize_project(name: str) -> str:
+    """Sanitize project folder name. Same char rules as basename, no extension strip."""
+    return _sanitize(name) or "untitled"
 
 
 def _suggestion_for(filename: str) -> str:
@@ -59,12 +67,41 @@ def _suggestion_for(filename: str) -> str:
     return sanitize_basename(last)
 
 
-def resolve_output(filename: str, overwrite: bool = False) -> Path:
-    """Resolve a sanitized output path under ``MIDI_MCP_OUTPUT_DIR``.
+def resolve_target_dir(project: str | None) -> Path:
+    """Resolve target directory: project folder or today's date folder.
 
-    Raises ``PathRejected`` if ``filename`` looks like a path. Otherwise
-    sanitizes and returns the resolved path. Auto-suffixes ``name-2.mid``,
-    ``name-3.mid``, ... on collision unless ``overwrite=True``.
+    ``project=None`` → ``<output_dir>/<YYYY-MM-DD>/`` (today).
+    ``project="x"`` → ``<output_dir>/<sanitized-x>/``.
+    Directory created if missing.
+    """
+    base = ensure_output_dir()
+    if project is None:
+        sub = date.today().isoformat()
+    else:
+        if not isinstance(project, str) or not project:
+            raise ValueError("project must be a non-empty string or None")
+        if _is_path_like(project):
+            raise PathRejected(
+                f"path-like project rejected: {project!r}. Provide a bare name "
+                f"(no '/', '\\', '~', or drive prefix).",
+                sanitize_project(project),
+            )
+        sub = sanitize_project(project)
+    target = base / sub
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def resolve_output(
+    filename: str,
+    overwrite: bool = False,
+    project: str | None = None,
+) -> Path:
+    """Resolve a sanitized output path under the resolved target directory.
+
+    Target dir = ``<output_dir>/<project-or-today's-date>/``. Auto-suffixes
+    ``name-2.mid``, ``name-3.mid``, ... on collision within that dir
+    unless ``overwrite=True``. Raises ``PathRejected`` on path-like input.
     """
     if not isinstance(filename, str) or not filename:
         raise ValueError("filename must be a non-empty string")
@@ -76,7 +113,7 @@ def resolve_output(filename: str, overwrite: bool = False) -> Path:
             suggestion,
         )
     stem = sanitize_basename(filename)
-    base_dir = ensure_output_dir()
+    base_dir = resolve_target_dir(project)
     candidate = base_dir / f"{stem}.mid"
     if overwrite or not candidate.exists():
         return candidate

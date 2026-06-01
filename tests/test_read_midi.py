@@ -30,8 +30,8 @@ def test_read_midi_returns_expected_shape(tmp_path):
     from midi_mcp.read_midi import read_midi
     from midi_mcp.write_midi import write_midi
 
-    write_midi(**_scale_fixture())
-    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+    written = write_midi(**_scale_fixture())
+    result = read_midi(written["path"])
 
     assert set(result.keys()) == {
         "summary",
@@ -53,9 +53,9 @@ def test_round_trip_preserves_tempo_time_sig_key(tmp_path):
     fx["tempo"] = 96.0
     fx["time_sig"] = [3, 4]
     fx["key"] = "Bb"
-    write_midi(**fx)
+    written = write_midi(**fx)
 
-    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+    result = read_midi(written["path"])
     assert result["tempo"] == pytest.approx(96.0, abs=1e-3)
     assert result["time_sig"] == [3, 4]
     assert result["key"] == "Bb"
@@ -65,8 +65,8 @@ def test_round_trip_preserves_note_count(tmp_path):
     from midi_mcp.read_midi import read_midi
     from midi_mcp.write_midi import write_midi
 
-    write_midi(**_scale_fixture())
-    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+    written = write_midi(**_scale_fixture())
+    result = read_midi(written["path"])
     # 8 notes written → 8 notes parseable from the file
     assert len(result["first_50_notes"]) == 8
 
@@ -82,9 +82,9 @@ def test_first_50_notes_truncates_at_50(tmp_path):
     fx = _scale_fixture()
     fx["tracks"] = [{"name": "many", "notes": notes}]
     fx["filename"] = "many_notes"
-    write_midi(**fx)
+    written = write_midi(**fx)
 
-    result = read_midi(str(tmp_path / "many_notes.mid"))
+    result = read_midi(written["path"])
     assert len(result["first_50_notes"]) == 50
 
 
@@ -92,8 +92,8 @@ def test_track_count_matches_written_file(tmp_path):
     from midi_mcp.read_midi import read_midi
     from midi_mcp.write_midi import write_midi
 
-    write_midi(**_scale_fixture())
-    result = read_midi(str(tmp_path / "scale_for_read.mid"))
+    written = write_midi(**_scale_fixture())
+    result = read_midi(written["path"])
     # conductor + 1 note track
     assert result["track_count"] == 2
 

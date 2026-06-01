@@ -4,6 +4,8 @@ Local MCP server that generates `.mid` files (freeform single-track parts, voice
 
 Status: v1 shipped. Six tools registered: `write_midi`, `read_midi`, `list_outputs`, `transpose`, `chord_track`, `freeform_track`.
 
+Files land in `<MIDI_MCP_OUTPUT_DIR>/<YYYY-MM-DD>/` by default. Pass `project="my_song"` to `write_midi` to group iterations of one piece together in `<MIDI_MCP_OUTPUT_DIR>/<my_song>/` instead. `list_outputs` returns both the folder list and files (one level deep) so the LLM can reuse existing project folders.
+
 ## Requirements
 
 - macOS

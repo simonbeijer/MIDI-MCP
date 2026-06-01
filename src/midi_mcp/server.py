@@ -21,8 +21,14 @@ def write_midi(
     key: str,
     filename: str,
     overwrite: bool = False,
+    project: str | None = None,
 ) -> dict[str, Any]:
     """Write tracks to a .mid file under MIDI_MCP_OUTPUT_DIR.
+
+    Files land in `<output_dir>/<project>/` when `project` is given,
+    otherwise in `<output_dir>/<YYYY-MM-DD>/` (today's date folder).
+    Call list_outputs() first to see which project folders already exist
+    so you can reuse one for ongoing work.
 
     Args:
         tracks: list of {name, instrument, notes}; notes are
@@ -32,10 +38,13 @@ def write_midi(
         key: key signature string (e.g. "C", "Bb", "F#m"); invalid → warn + "C".
         filename: bare filename; path-like input is rejected.
         overwrite: if True, overwrite an existing file with the same name.
+        project: optional project folder name. Sanitized like filenames
+            (lowercase alnum/dash/underscore). When set, replaces the
+            date folder. Reuses the folder if it already exists.
 
     Returns {path, warnings, summary, duration_seconds}.
     """
-    return _write_midi(tracks, tempo, time_sig, key, filename, overwrite)
+    return _write_midi(tracks, tempo, time_sig, key, filename, overwrite, project)
 
 
 @mcp.tool()
@@ -49,11 +58,17 @@ def read_midi(path: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def list_outputs() -> list[dict[str, Any]]:
-    """List .mid files in MIDI_MCP_OUTPUT_DIR.
+def list_outputs() -> dict[str, Any]:
+    """List folders and .mid files in MIDI_MCP_OUTPUT_DIR.
 
-    Returns [{filename, modified, size_bytes}, ...]. Excludes dotfiles
-    (including the seed .log) and any non-.mid files.
+    Returns `{folders, files}`:
+    - `folders`: top-level subdirectory names (project folders + date folders).
+    - `files`: `[{path, modified, size_bytes}, ...]` recursed one level deep.
+      `path` is relative to MIDI_MCP_OUTPUT_DIR (e.g. "blues_demo/take.mid").
+
+    Use the `folders` list to discover existing project names so you can
+    reuse them when calling write_midi(project=...). Excludes dotfiles
+    (seed .log) and non-.mid files.
     """
     return _list_outputs()
 
