@@ -3,7 +3,7 @@ from pathlib import Path
 
 TICKS_PER_BEAT = 480
 
-_DEFAULT_OUTPUT_DIR = "~/MIDI-MCP/output/"
+_DEFAULT_OUTPUT_DIR = "~/Documents/MIDI-MCP/"
 
 
 def output_dir() -> Path:

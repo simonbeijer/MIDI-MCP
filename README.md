@@ -1,8 +1,8 @@
 # MIDI-MCP
 
-Local MCP server that generates `.mid` files (bass lines, voiced chord comps) from natural-language prompts in Claude Desktop. Drag the file into Logic Pro and keep working.
+Local MCP server that generates `.mid` files (freeform single-track parts, voiced chord comps) from natural-language prompts in Claude Desktop. Drag the file into Logic Pro and keep working.
 
-Status: v1 in progress. Slice 01 ships the empty FastMCP stdio server; no tools registered yet.
+Status: v1 shipped. Six tools registered: `write_midi`, `read_midi`, `list_outputs`, `transpose`, `chord_track`, `freeform_track`.
 
 ## Requirements
 
@@ -47,18 +47,20 @@ Add an entry to `~/Library/Application Support/Claude/claude_desktop_config.json
         "midi_mcp"
       ],
       "env": {
-        "MIDI_MCP_OUTPUT_DIR": "~/MIDI-MCP/output/"
+        "MIDI_MCP_OUTPUT_DIR": "~/Documents/MIDI-MCP/"
       }
     }
   }
 }
 ```
 
-Replace `/ABSOLUTE/PATH/TO/MIDI-MCP` with the absolute path to this checkout. Restart Claude Desktop after editing. The server appears under MCP integrations; in slice 01 it exposes zero tools (the connection itself is what we are validating).
+Replace `/ABSOLUTE/PATH/TO/MIDI-MCP` with the absolute path to this checkout. Restart Claude Desktop after editing. The server appears under MCP integrations and exposes the six tools listed above.
+
+For a step-by-step install walkthrough aimed at non-developers, see [`INSTALL.md`](INSTALL.md).
 
 ## Configuration
 
-- `MIDI_MCP_OUTPUT_DIR` — directory for written `.mid` files and the seed log. Default `~/MIDI-MCP/output/`. Created on startup if missing.
+- `MIDI_MCP_OUTPUT_DIR` — directory for written `.mid` files and the seed log. Default `~/Documents/MIDI-MCP/`. Created on startup if missing.
 - `ticks_per_beat` is fixed at 480 (see `src/midi_mcp/config.py`).
 
 ## Layout
@@ -66,7 +68,7 @@ Replace `/ABSOLUTE/PATH/TO/MIDI-MCP` with the absolute path to this checkout. Re
 ```
 src/midi_mcp/      # package (FastMCP entry, config)
 tests/             # pytest
-tests/snapshots/   # binary .mid snapshots (added in later slices)
+tests/snapshots/   # binary .mid snapshots
 .scratch/          # internal issue tracker (gitignored)
 docs/              # ADRs and agent docs
 ```
