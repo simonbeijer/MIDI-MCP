@@ -51,8 +51,11 @@ def write_midi(
 def read_midi(path: str) -> dict[str, Any]:
     """Read a .mid file and return its structured contents.
 
-    Returns {summary, first_50_notes, tempo, time_sig, key, track_count}.
-    Notes are truncated to the first 50 to bound context size.
+    Returns {summary, notes, total_note_count, notes_truncated, note_limit,
+    tempo, time_sig, key, track_count}. Notes are capped at `note_limit`
+    (currently 500) to bound context size. When `notes_truncated` is True,
+    `notes` holds the first 500 by start time and later notes are not
+    returned — tell the user the read was partial.
     """
     return _read_midi(path)
 

@@ -1,4 +1,4 @@
-"""Behavior tests for read_midi: round-trip metadata + first_50_notes shape."""
+"""Behavior tests for read_midi: round-trip metadata + notes truncation shape."""
 
 from pathlib import Path
 
@@ -35,14 +35,20 @@ def test_read_midi_returns_expected_shape(tmp_path):
 
     assert set(result.keys()) == {
         "summary",
-        "first_50_notes",
+        "notes",
+        "total_note_count",
+        "notes_truncated",
+        "note_limit",
         "tempo",
         "time_sig",
         "key",
         "track_count",
     }
     assert isinstance(result["summary"], str)
-    assert isinstance(result["first_50_notes"], list)
+    assert isinstance(result["notes"], list)
+    assert result["note_limit"] == 500
+    assert result["notes_truncated"] is False
+    assert result["total_note_count"] == 8
 
 
 def test_round_trip_preserves_tempo_time_sig_key(tmp_path):
@@ -68,16 +74,17 @@ def test_round_trip_preserves_note_count(tmp_path):
     written = write_midi(**_scale_fixture())
     result = read_midi(written["path"])
     # 8 notes written → 8 notes parseable from the file
-    assert len(result["first_50_notes"]) == 8
+    assert len(result["notes"]) == 8
+    assert result["total_note_count"] == 8
 
 
-def test_first_50_notes_truncates_at_50(tmp_path):
+def test_notes_truncate_at_limit(tmp_path):
     from midi_mcp.read_midi import read_midi
     from midi_mcp.write_midi import write_midi
 
     notes = [
         {"pitch": 60, "start": float(i) * 0.25, "duration": 0.25, "velocity": 80, "channel": 0}
-        for i in range(75)
+        for i in range(600)
     ]
     fx = _scale_fixture()
     fx["tracks"] = [{"name": "many", "notes": notes}]
@@ -85,7 +92,10 @@ def test_first_50_notes_truncates_at_50(tmp_path):
     written = write_midi(**fx)
 
     result = read_midi(written["path"])
-    assert len(result["first_50_notes"]) == 50
+    assert len(result["notes"]) == 500
+    assert result["total_note_count"] == 600
+    assert result["notes_truncated"] is True
+    assert "TRUNCATED" in result["summary"]
 
 
 def test_track_count_matches_written_file(tmp_path):

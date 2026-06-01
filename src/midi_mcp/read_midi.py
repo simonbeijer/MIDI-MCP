@@ -1,6 +1,8 @@
 """`read_midi` tool: parse .mid via mido into the data contract.
 
-Returns at most 50 notes to bound context blow-up.
+Returns at most 500 notes to bound context blow-up. Dense drum patterns
+beyond ~5-8 bars will hit the cap; bass/chord/melody reads typically fit
+30+ bars.
 """
 
 from pathlib import Path
@@ -8,7 +10,7 @@ from typing import Any
 
 import mido
 
-_MAX_NOTES = 50
+_MAX_NOTES = 500
 
 
 def _extract_meta(mid: mido.MidiFile) -> tuple[float | None, list[int] | None, str | None]:
@@ -58,9 +60,12 @@ def _extract_notes(mid: mido.MidiFile) -> list[dict[str, Any]]:
 
 
 def read_midi(path: str) -> dict[str, Any]:
-    """Read a .mid file and return structured fields + first 50 notes.
+    """Read a .mid file and return structured fields + up to 500 notes.
 
-    Returns ``{summary, first_50_notes, tempo, time_sig, key, track_count}``.
+    Returns ``{summary, notes, total_note_count, notes_truncated,
+    note_limit, tempo, time_sig, key, track_count}``. When
+    ``notes_truncated`` is True, ``notes`` holds the first ``note_limit``
+    by start time; later notes are not returned.
     """
     p = Path(path).expanduser()
     if not p.exists():
@@ -69,20 +74,30 @@ def read_midi(path: str) -> dict[str, Any]:
     mid = mido.MidiFile(str(p))
     tempo, time_sig, key = _extract_meta(mid)
     all_notes = _extract_notes(mid)
-    truncated = all_notes[:_MAX_NOTES]
+    notes = all_notes[:_MAX_NOTES]
+    total = len(all_notes)
+    truncated = total > _MAX_NOTES
     track_count = len(mid.tracks)
 
     tempo_str = f"{tempo:g} bpm" if tempo is not None else "unknown tempo"
     ts_str = f"{time_sig[0]}/{time_sig[1]}" if time_sig else "unknown time_sig"
     key_str = f"key {key}" if key else "unknown key"
+    trunc_str = (
+        f" — TRUNCATED to first {_MAX_NOTES} of {total} notes"
+        if truncated
+        else ""
+    )
     summary = (
-        f"read {p.name}: {track_count} track(s), {len(all_notes)} note(s) "
-        f"({len(truncated)} returned), {tempo_str}, {ts_str}, {key_str}"
+        f"read {p.name}: {track_count} track(s), {total} note(s) "
+        f"({len(notes)} returned){trunc_str}, {tempo_str}, {ts_str}, {key_str}"
     )
 
     return {
         "summary": summary,
-        "first_50_notes": truncated,
+        "notes": notes,
+        "total_note_count": total,
+        "notes_truncated": truncated,
+        "note_limit": _MAX_NOTES,
         "tempo": tempo,
         "time_sig": time_sig,
         "key": key,
