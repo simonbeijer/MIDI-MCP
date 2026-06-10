@@ -1,84 +1,64 @@
-# MIDI-MCP — Install Guide (Mac, non-technical)
+# MIDI-MCP — Install Guide (Mac)
 
-This guide walks a fresh Mac through installing MIDI-MCP and connecting it to Claude Desktop. No prior coding setup is assumed. Copy and paste each command exactly.
+Get MIDI-MCP running and connected to Claude Desktop. A few steps, mostly waiting.
 
-You will install four things:
+You'll install:
 
-1. Claude Desktop (the app you chat with)
-2. Command Line Tools (a one-time Apple install needed by the rest)
-3. `uv` (a small tool that runs the MIDI server)
-4. The MIDI-MCP project itself
+1. Claude Desktop
+2. `uv` (runs the MIDI server, brings its own Python — don't install Python separately)
+3. The MIDI-MCP project folder
 
-Then you tell Claude Desktop where to find it. Total time: about 15 minutes.
+Then point Claude Desktop at it.
+
+Commands in code blocks go in Terminal. Paste, press `Return`.
 
 ---
 
-## Step 1 — Install Claude Desktop
+## Step 1 — Claude Desktop
 
-1. Go to https://claude.ai/download
-2. Download the macOS version.
-3. Open the `.dmg` and drag **Claude** into **Applications**.
-4. Launch Claude once and sign in. Quit it again.
+Download from https://claude.ai/download. Drag into Applications. Launch once, sign in, quit.
 
 ---
 
 ## Step 2 — Open Terminal
 
-Press `Cmd + Space`, type `Terminal`, press `Return`. A black or white window opens. This is where you paste commands. You press `Return` after each one.
+`Cmd + Space`, type `Terminal`, `Return`.
 
 ---
 
-## Step 3 — Install Apple Command Line Tools
-
-Paste this and press `Return`:
-
-```bash
-xcode-select --install
-```
-
-A popup appears. Click **Install**. Wait for it to finish (a few minutes). If it says "already installed", skip ahead.
-
----
-
-## Step 4 — Install `uv`
-
-`uv` is the tool that will run the MIDI server. Paste this and press `Return`:
+## Step 3 — Install `uv`
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-When it finishes, **close Terminal and open a new one** so the new tool is found.
-
-Check it worked:
+**Close Terminal and open a new one** so the new tool is found. Confirm:
 
 ```bash
 uv --version
 ```
 
-You should see something like `uv 0.5.x`. If you see "command not found", restart Terminal again.
+If you see `command not found`, close and reopen Terminal again.
+
+> `uv` includes Python. You do **not** need to install Python from python.org.
 
 ---
 
-## Step 5 — Download MIDI-MCP
+## Step 4 — Get the project
 
-Pick a folder you'll remember. We'll use your Documents folder.
+You need the MIDI-MCP folder somewhere on your Mac. Two options:
 
-```bash
-cd ~/Documents
-git clone https://github.com/simonbeijer/MIDI-MCP.git
-cd MIDI-MCP
-```
+- **ZIP:** unzip it, drag the folder anywhere you'll remember (Documents is fine).
+- **GitHub:** `cd` into a folder, then `git clone https://github.com/simonbeijer/MIDI-MCP.git`. If `git` isn't installed, run `xcode-select --install` first.
 
-> If you were given a ZIP instead, double-click it, drag the unzipped folder into `Documents`, then in Terminal type `cd ~/Documents/MIDI-MCP`.
-
-Install the project's pieces:
+Then `cd` into the project folder and install its pieces:
 
 ```bash
+cd /path/to/MIDI-MCP
 uv sync
 ```
 
-This downloads Python and the music libraries. First run takes a minute or two.
+First run downloads Python + libraries (~100MB, 1–2 min on decent net, longer on slow).
 
 Confirm the server starts:
 
@@ -86,31 +66,37 @@ Confirm the server starts:
 uv run python -m midi_mcp
 ```
 
-The cursor will sit there doing nothing — that means it's running and waiting. Press `Ctrl + C` to stop it. If you saw no red error text, you're good.
+Cursor sits doing nothing = running and waiting. Press `Ctrl + C` to stop. No red error = good.
 
 ---
 
-## Step 6 — Find your project path
+## Step 5 — Grab the two paths Claude Desktop needs
 
-You need the full path so Claude Desktop knows where to look. Paste:
+While still in the project folder:
 
 ```bash
 pwd
+which uv
 ```
 
-It will print something like `/Users/yourname/Documents/MIDI-MCP`. **Copy that line — you'll need it in the next step.**
+Copy both outputs exactly. They look like:
+
+```
+/Users/yourname/Documents/MIDI-MCP
+/Users/yourname/.local/bin/uv
+```
 
 ---
 
-## Step 7 — Tell Claude Desktop about the server
+## Step 6 — Tell Claude Desktop about the server
 
-Open the Claude config file in TextEdit:
+Open the config file:
 
 ```bash
 open -a TextEdit ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
-If TextEdit says the file doesn't exist, create it first:
+If TextEdit says the file doesn't exist:
 
 ```bash
 mkdir -p ~/Library/Application\ Support/Claude
@@ -118,91 +104,64 @@ touch ~/Library/Application\ Support/Claude/claude_desktop_config.json
 open -a TextEdit ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
-Paste this into the file:
+Paste this in, then **replace the two `<...>` placeholders** with the paths from Step 5. Pick any output folder you want for `MIDI_MCP_OUTPUT_DIR` — must be a full path starting with `/Users/`, never `~`.
 
 ```json
 {
   "mcpServers": {
     "midi-mcp": {
-      "command": "uv",
+      "command": "<UV_PATH>",
       "args": [
         "--directory",
-        "/Users/yourname/Documents/MIDI-MCP",
+        "<PROJECT_PATH>",
         "run",
         "python",
         "-m",
         "midi_mcp"
       ],
       "env": {
-        "MIDI_MCP_OUTPUT_DIR": "~/Documents/MIDI-MCP/"
+        "MIDI_MCP_OUTPUT_DIR": "/Users/yourname/Documents/MIDI-MCP/"
       }
     }
   }
 }
 ```
 
-**Replace `/Users/yourname/Documents/MIDI-MCP` with the path you copied in Step 6.** The path must be the full one (starting with `/Users/`), not `~/Documents/...`.
-
-Save (`Cmd + S`) and close TextEdit.
+Save (`Cmd + S`), close TextEdit.
 
 ---
 
-## Step 8 — Point `uv` at the right place
+## Step 7 — Restart Claude Desktop
 
-Claude Desktop runs apps in a stripped-down environment and may not find `uv`. Fix it by giving the full path:
-
-```bash
-which uv
-```
-
-Copy what it prints (e.g. `/Users/yourname/.local/bin/uv`). In the config file from Step 7, replace `"command": "uv"` with the full path, e.g. `"command": "/Users/yourname/.local/bin/uv"`. Save again.
-
----
-
-## Step 9 — Restart Claude Desktop
-
-Fully quit Claude (`Cmd + Q` — closing the window is not enough). Reopen it.
-
-Click the small tools/hammer icon in the chat box. You should see **midi-mcp** listed with its tools. If it's missing, open the Claude **Settings → Developer → MCP** view to read any error message.
+Fully quit (`Cmd + Q` — closing the window is not enough). Reopen. Click the hammer icon in the chat box. You should see **midi-mcp** listed.
 
 ---
 
 ## Where do my files go?
 
-Generated `.mid` files appear in:
+In whatever folder you set as `MIDI_MCP_OUTPUT_DIR`, sorted into subfolders:
 
 ```
-~/Documents/MIDI-MCP/<YYYY-MM-DD>/    # default — today's date folder
-~/Documents/MIDI-MCP/<your_song>/     # if Claude knows the song name
+<output_dir>/<YYYY-MM-DD>/    # default — today's date
+<output_dir>/<your_song>/     # if you name a song in chat
 ```
 
-By default each day gets its own folder so today's work is easy to find. If you tell Claude something like "save it in the blues demo project", it groups all takes for that song together across days. Open the parent folder in Finder.
+Folders are created automatically. Open in Finder.
 
 ---
 
-## Quick start — useful prompts
+## Try it
 
-Once Claude Desktop shows the midi-mcp tools, you can ask it things like:
+Once `midi-mcp` shows in the hammer menu, ask Claude things like:
 
 - *"Make a bass line for 8 bars of C — F — G — C in 4/4 at 90 BPM, walking style."*
 - *"Comp those same chords with a smooth jazz voicing on channel 2."*
 - *"List the MIDI files I've generated so far."*
-- *"Read back the notes in my last bass file."*
-
-Claude will pick the right tool, write the `.mid`, and tell you the filename.
-
-### Optional — make a reusable starter prompt
-
-You don't need to remember the exact tool names. Save a personal prompt template in Claude Desktop (Settings → Profile → Custom instructions, or pin it as a project) like:
-
-```
-When I describe music, use the midi-mcp tools to generate the file.
-Default to 4/4, 90 BPM, channel 1 unless I say otherwise.
-After writing each file, tell me the filename and the seed.
-```
-
-That way every new chat already knows how you like to work, and you can just type *"4 bars of Am G F E, walking bass"* and get a file back.
 
 ---
 
-That's it. If something breaks, the most common fix is **fully quitting Claude Desktop** and reopening it after any config change.
+## If something breaks
+
+- **midi-mcp missing from hammer menu** → fully quit Claude (`Cmd + Q`) and reopen. Then Settings → Developer → MCP for any error message.
+- **`command not found: uv`** → close and reopen Terminal.
+- **Config JSON paths** → always full path starting with `/Users/`, never `~`.
